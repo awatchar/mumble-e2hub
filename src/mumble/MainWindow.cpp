@@ -17,6 +17,8 @@
 #include "ConnectDialog.h"
 #include "Connection.h"
 #include "Database.h"
+#include "DispatchProxyModel.h"
+#include "DispatchTileView.h"
 #include "DeveloperConsole.h"
 #include "Log.h"
 #include "MumbleConstants.h"
@@ -168,7 +170,14 @@ MainWindow::MainWindow(QWidget *p)
 	qaEmpty->setEnabled(false);
 
 	createActions();
+	qaDispatchView = new QAction(tr("Dispatch View"), this);
+	qaDispatchView->setObjectName(QLatin1String("qaDispatchView"));
+	qaDispatchView->setCheckable(true);
+	qaDispatchView->setChecked(false);
 	setupUi(this);
+	qmConfig->addSeparator();
+	qmConfig->addAction(qaDispatchView);
+	QObject::connect(qaDispatchView, &QAction::triggered, this, &MainWindow::on_qaDispatchView_triggered);
 	setupGui();
 	connect(qmUser, SIGNAL(aboutToShow()), this, SLOT(qmUser_aboutToShow()));
 	connect(qmChannel, SIGNAL(aboutToShow()), this, SLOT(qmChannel_aboutToShow()));
@@ -461,7 +470,16 @@ void MainWindow::createActions() {
 
 void MainWindow::setupGui() {
 	updateWindowTitle();
-	setCentralWidget(qtvUsers);
+	m_userViewStack = new QStackedWidget(this);
+	m_dispatchTileView = new DispatchTileView(m_userViewStack);
+	m_dispatchProxyModel = new DispatchProxyModel(m_dispatchTileView);
+	m_dispatchTileView->setModel(m_dispatchProxyModel);
+
+	m_userViewStack->addWidget(qtvUsers);
+	m_userViewStack->addWidget(m_dispatchTileView);
+	m_userViewStack->setCurrentWidget(qtvUsers);
+
+	setCentralWidget(m_userViewStack);
 	setAcceptDrops(true);
 
 #ifdef Q_OS_MAC
@@ -487,6 +505,7 @@ void MainWindow::setupGui() {
 
 	pmModel = new UserModel(qtvUsers);
 	qtvUsers->setModel(pmModel);
+	m_dispatchProxyModel->setSourceModel(pmModel);
 	qtvUsers->setRowHidden(0, QModelIndex(), true);
 	qtvUsers->ensurePolished();
 
@@ -2830,6 +2849,15 @@ void MainWindow::on_qaConfigMinimal_triggered() {
 	Global::get().s.bMinimalView = qaConfigMinimal->isChecked();
 	updateWindowTitle();
 	setupView();
+}
+
+void MainWindow::on_qaDispatchView_triggered() {
+	if (!m_userViewStack || !m_dispatchTileView) {
+		return;
+	}
+
+	m_userViewStack->setCurrentWidget(qaDispatchView->isChecked() ? static_cast< QWidget * >(m_dispatchTileView)
+																 : static_cast< QWidget * >(qtvUsers));
 }
 
 void MainWindow::on_qaConfigHideFrame_triggered() {
