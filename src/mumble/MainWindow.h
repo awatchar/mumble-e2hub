@@ -243,6 +243,8 @@ protected:
 	void showContextMenuForIndex(const QModelIndex &idx, const QPoint &globalPos, bool usePositionForGettingContext);
 
 	void autocompleteUsername();
+	void showUserContextMenuForIndex(const QModelIndex &idx, const QPoint &globalPos,
+								const QPoint &contextPos, bool usePositionForGettingContext);
 
 public slots:
 	void on_qmServer_aboutToShow();
@@ -320,8 +322,10 @@ public slots:
 	void on_qteChat_backtabPressed();
 	void on_qteChat_ctrlSpacePressed();
 	void on_qtvUsers_customContextMenuRequested(const QPoint &mpos, bool usePositionForGettingContext = true);
-	void on_dispatchTile_activated(const QModelIndex &proxyIndex);
-	void on_dispatchTile_customContextMenuRequested(const QPoint &mpos);
+	void on_qtvDispatch_clicked(const QModelIndex &index);
+	void on_qtvDispatch_activated(const QModelIndex &index);
+	void on_qtvDispatch_customContextMenuRequested(const QPoint &mpos);
+	void on_qtvDispatch_currentChanged(const QModelIndex &current, const QModelIndex &previous);
 	void on_qteLog_customContextMenuRequested(const QPoint &pos);
 	void on_qteLog_anchorClicked(const QUrl &);
 	void on_qteLog_highlighted(const QUrl &link);

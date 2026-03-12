@@ -16,8 +16,8 @@ DispatchTileView::DispatchTileView(QWidget *parent) : QListView(parent) {
 	setMovement(QListView::Static);
 	setSpacing(8);
 	setSelectionMode(QAbstractItemView::SingleSelection);
-	setContextMenuPolicy(Qt::CustomContextMenu);
 	setUniformItemSizes(true);
+	setContextMenuPolicy(Qt::CustomContextMenu);
 	setItemDelegate(new DispatchTileDelegate(this));
 }
 
