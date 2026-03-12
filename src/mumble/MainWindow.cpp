@@ -473,13 +473,8 @@ void MainWindow::setupGui() {
 	updateWindowTitle();
 	m_userViewStack = new QStackedWidget(this);
 	m_dispatchTileView = new DispatchTileView(m_userViewStack);
-
-	QStandardItemModel *dispatchPlaceholderModel = new QStandardItemModel(m_dispatchTileView);
-	dispatchPlaceholderModel->appendRow(new QStandardItem(tr("Dispatch View Placeholder")));
-
-	DispatchProxyModel *dispatchProxyModel = new DispatchProxyModel(m_dispatchTileView);
-	dispatchProxyModel->setSourceModel(dispatchPlaceholderModel);
-	m_dispatchTileView->setModel(dispatchProxyModel);
+	m_dispatchProxyModel = new DispatchProxyModel(m_dispatchTileView);
+	m_dispatchTileView->setModel(m_dispatchProxyModel);
 
 	m_userViewStack->addWidget(qtvUsers);
 	m_userViewStack->addWidget(m_dispatchTileView);
@@ -511,6 +506,7 @@ void MainWindow::setupGui() {
 
 	pmModel = new UserModel(qtvUsers);
 	qtvUsers->setModel(pmModel);
+	m_dispatchProxyModel->setSourceModel(pmModel);
 	qtvUsers->setRowHidden(0, QModelIndex(), true);
 	qtvUsers->ensurePolished();
 

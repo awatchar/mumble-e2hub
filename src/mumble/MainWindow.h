@@ -51,6 +51,7 @@ class SearchDialog;
 class MenuLabel;
 class ListenerVolumeSlider;
 class UserLocalVolumeSlider;
+class DispatchProxyModel;
 class DispatchTileView;
 
 struct ShortcutTarget;
@@ -200,9 +201,10 @@ protected:
 	QAction *qaTransmitModeSeparator;
 
 	Search::SearchDialog *m_searchDialog = nullptr;
-	QStackedWidget *m_userViewStack      = nullptr;
-	DispatchTileView *m_dispatchTileView = nullptr;
-	QAction *qaDispatchView              = nullptr;
+	QStackedWidget *m_userViewStack        = nullptr;
+	DispatchTileView *m_dispatchTileView   = nullptr;
+	DispatchProxyModel *m_dispatchProxyModel = nullptr;
+	QAction *qaDispatchView                = nullptr;
 
 	qt_unique_ptr< MenuLabel > m_localVolumeLabel;
 	qt_unique_ptr< UserLocalVolumeSlider > m_userLocalVolumeSlider;

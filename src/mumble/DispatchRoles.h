@@ -12,8 +12,11 @@ namespace DispatchRoles {
 enum Role {
 	DisplayName = Qt::UserRole + 1,
 	ChannelName,
+	SessionId,
 	TalkingState,
-	Priority
+	Muted,
+	Deafened,
+	LocalMuted
 };
 } // namespace DispatchRoles
 
