@@ -241,6 +241,7 @@ protected:
 	Channel *getContextMenuChannel();
 	ClientUser *getContextMenuUser();
 	ContextMenuTarget getContextMenuTargets();
+	void showContextMenuForIndex(const QModelIndex &idx, const QPoint &globalPos, bool usePositionForGettingContext);
 
 	void autocompleteUsername();
 	void showUserContextMenuForIndex(const QModelIndex &idx, const QPoint &globalPos,
