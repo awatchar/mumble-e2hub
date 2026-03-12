@@ -17,6 +17,8 @@
 #include "ConnectDialog.h"
 #include "Connection.h"
 #include "Database.h"
+#include "DispatchProxyModel.h"
+#include "DispatchTileView.h"
 #include "DeveloperConsole.h"
 #include "Log.h"
 #include "MumbleConstants.h"
@@ -69,6 +71,7 @@
 #endif
 
 #include <QAccessible>
+#include <QtCore/QSignalBlocker>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QUrlQuery>
 #include <QtGui/QClipboard>
@@ -168,7 +171,14 @@ MainWindow::MainWindow(QWidget *p)
 	qaEmpty->setEnabled(false);
 
 	createActions();
+	qaDispatchView = new QAction(tr("Dispatch View"), this);
+	qaDispatchView->setObjectName(QLatin1String("qaDispatchView"));
+	qaDispatchView->setCheckable(true);
+	qaDispatchView->setChecked(false);
 	setupUi(this);
+	qmConfig->addSeparator();
+	qmConfig->addAction(qaDispatchView);
+	QObject::connect(qaDispatchView, &QAction::triggered, this, &MainWindow::on_qaDispatchView_triggered);
 	setupGui();
 	connect(qmUser, SIGNAL(aboutToShow()), this, SLOT(qmUser_aboutToShow()));
 	connect(qmChannel, SIGNAL(aboutToShow()), this, SLOT(qmChannel_aboutToShow()));
@@ -461,7 +471,16 @@ void MainWindow::createActions() {
 
 void MainWindow::setupGui() {
 	updateWindowTitle();
-	setCentralWidget(qtvUsers);
+	m_userViewStack = new QStackedWidget(this);
+	m_dispatchTileView = new DispatchTileView(m_userViewStack);
+	m_dispatchProxyModel = new DispatchProxyModel(m_dispatchTileView);
+	m_dispatchTileView->setModel(m_dispatchProxyModel);
+
+	m_userViewStack->addWidget(qtvUsers);
+	m_userViewStack->addWidget(m_dispatchTileView);
+	m_userViewStack->setCurrentWidget(qtvUsers);
+
+	setCentralWidget(m_userViewStack);
 	setAcceptDrops(true);
 
 #ifdef Q_OS_MAC
@@ -487,6 +506,7 @@ void MainWindow::setupGui() {
 
 	pmModel = new UserModel(qtvUsers);
 	qtvUsers->setModel(pmModel);
+	m_dispatchProxyModel->setSourceModel(pmModel);
 	qtvUsers->setRowHidden(0, QModelIndex(), true);
 	qtvUsers->ensurePolished();
 
@@ -562,6 +582,10 @@ void MainWindow::setupGui() {
 
 	connect(qtvUsers->selectionModel(), SIGNAL(currentChanged(const QModelIndex &, const QModelIndex &)),
 			SLOT(qtvUserCurrentChanged(const QModelIndex &, const QModelIndex &)));
+	QObject::connect(m_dispatchTileView, &DispatchTileView::activated, this, &MainWindow::on_dispatchTile_activated);
+	QObject::connect(m_dispatchTileView, &DispatchTileView::clicked, this, &MainWindow::on_dispatchTile_activated);
+	QObject::connect(m_dispatchTileView, &DispatchTileView::customContextMenuRequested, this,
+				 &MainWindow::on_dispatchTile_customContextMenuRequested);
 
 	// QtCreator and uic.exe do not allow adding arbitrary widgets
 	// such as a MUComboBox to a QToolbar, even though they are supported.
@@ -981,6 +1005,88 @@ bool MainWindow::handleSpecialContextMenu(const QUrl &url, const QPoint &pos_, b
 	return true;
 }
 
+void MainWindow::showContextMenuForIndex(const QModelIndex &idx, const QPoint &globalPos,
+						   bool usePositionForGettingContext) {
+	if (!idx.isValid()) {
+		return;
+	}
+
+	ClientUser *p    = pmModel->getUser(idx);
+	Channel *channel = pmModel->getChannel(idx);
+
+	if (pmModel->isChannelListener(idx)) {
+		QModelIndex parent = idx.parent();
+
+		if (parent.isValid()) {
+			cContextChannel = pmModel->getChannel(parent);
+		}
+		cuContextUser.clear();
+		qmListener->exec(globalPos, nullptr);
+		cuContextUser.clear();
+		cContextChannel.clear();
+	} else if (p) {
+		cuContextUser.clear();
+		if (!usePositionForGettingContext) {
+			cuContextUser = p;
+		}
+
+		qmUser->exec(globalPos, nullptr);
+		cuContextUser.clear();
+	} else {
+		cContextChannel.clear();
+
+		if (!usePositionForGettingContext && channel) {
+			cContextChannel = channel;
+		}
+
+		qmChannel->exec(globalPos, nullptr);
+		cContextChannel.clear();
+	}
+
+	qpContextPosition = QPoint();
+}
+
+void MainWindow::on_dispatchTile_activated(const QModelIndex &proxyIndex) {
+	if (!m_dispatchProxyModel || !proxyIndex.isValid()) {
+		return;
+	}
+
+	QModelIndex sourceIndex = m_dispatchProxyModel->mapToSource(proxyIndex);
+	if (!sourceIndex.isValid()) {
+		return;
+	}
+
+	if (qtvUsers->selectionModel()) {
+		QSignalBlocker selectionBlocker(qtvUsers->selectionModel());
+		qtvUsers->setCurrentIndex(sourceIndex);
+	}
+
+	updateChatBar();
+}
+
+void MainWindow::on_dispatchTile_customContextMenuRequested(const QPoint &mpos) {
+	if (!m_dispatchProxyModel || !m_dispatchTileView) {
+		return;
+	}
+
+	QModelIndex proxyIndex = m_dispatchTileView->indexAt(mpos);
+	if (!proxyIndex.isValid()) {
+		proxyIndex = m_dispatchTileView->currentIndex();
+	}
+
+	QModelIndex sourceIndex = m_dispatchProxyModel->mapToSource(proxyIndex);
+	if (!sourceIndex.isValid()) {
+		return;
+	}
+
+	if (qtvUsers->selectionModel()) {
+		QSignalBlocker selectionBlocker(qtvUsers->selectionModel());
+		qtvUsers->setCurrentIndex(sourceIndex);
+	}
+
+	showContextMenuForIndex(sourceIndex, m_dispatchTileView->viewport()->mapToGlobal(mpos), false);
+}
+
 void MainWindow::on_qtvUsers_customContextMenuRequested(const QPoint &mpos, bool usePositionForGettingContext) {
 	QModelIndex idx = qtvUsers->indexAt(mpos);
 	if (!idx.isValid() || !usePositionForGettingContext) {
@@ -989,44 +1095,8 @@ void MainWindow::on_qtvUsers_customContextMenuRequested(const QPoint &mpos, bool
 		qtvUsers->setCurrentIndex(idx);
 	}
 
-	ClientUser *p    = pmModel->getUser(idx);
-	Channel *channel = pmModel->getChannel(idx);
-
-	qpContextPosition = mpos;
-	if (pmModel->isChannelListener(idx)) {
-		// Have a separate context menu for listeners
-		QModelIndex parent = idx.parent();
-
-		if (parent.isValid()) {
-			// Find the channel in which the action was triggered and set it
-			// in order to be able to obtain it in the action itself
-			cContextChannel = pmModel->getChannel(parent);
-		}
-		cuContextUser.clear();
-		qmListener->exec(qtvUsers->mapToGlobal(mpos), nullptr);
-		cuContextUser.clear();
-		cContextChannel.clear();
-	} else {
-		if (p) {
-			cuContextUser.clear();
-			if (!usePositionForGettingContext) {
-				cuContextUser = p;
-			}
-
-			qmUser->exec(qtvUsers->mapToGlobal(mpos), nullptr);
-			cuContextUser.clear();
-		} else {
-			cContextChannel.clear();
-
-			if (!usePositionForGettingContext && channel) {
-				cContextChannel = channel;
-			}
-
-			qmChannel->exec(qtvUsers->mapToGlobal(mpos), nullptr);
-			cContextChannel.clear();
-		}
-	}
-	qpContextPosition = QPoint();
+	qpContextPosition = usePositionForGettingContext ? mpos : QPoint();
+	showContextMenuForIndex(idx, qtvUsers->mapToGlobal(mpos), usePositionForGettingContext);
 }
 
 void MainWindow::on_qteLog_customContextMenuRequested(const QPoint &mpos) {
@@ -2832,6 +2902,30 @@ void MainWindow::on_qaConfigMinimal_triggered() {
 	setupView();
 }
 
+void MainWindow::on_qaDispatchView_triggered() {
+	if (!m_userViewStack || !m_dispatchTileView || !m_dispatchProxyModel) {
+		return;
+	}
+
+	if (qaDispatchView->isChecked()) {
+		QModelIndex dispatchIndex = m_dispatchProxyModel->mapFromSource(qtvUsers->currentIndex());
+		if (dispatchIndex.isValid() && m_dispatchTileView->selectionModel()) {
+			QSignalBlocker selectionBlocker(m_dispatchTileView->selectionModel());
+			m_dispatchTileView->setCurrentIndex(dispatchIndex);
+		}
+		m_userViewStack->setCurrentWidget(m_dispatchTileView);
+	} else {
+		QModelIndex sourceIndex = m_dispatchProxyModel->mapToSource(m_dispatchTileView->currentIndex());
+		if (sourceIndex.isValid() && qtvUsers->selectionModel()) {
+			QSignalBlocker selectionBlocker(qtvUsers->selectionModel());
+			qtvUsers->setCurrentIndex(sourceIndex);
+		}
+		m_userViewStack->setCurrentWidget(qtvUsers);
+	}
+
+	updateChatBar();
+}
+
 void MainWindow::on_qaConfigHideFrame_triggered() {
 	Global::get().s.bHideFrame = qaConfigHideFrame->isChecked();
 	setupView(false);
@@ -3825,6 +3919,12 @@ void MainWindow::on_qaTalkingUIToggle_triggered() {
  * the selected user/channel in the users treeview.
  */
 void MainWindow::qtvUserCurrentChanged(const QModelIndex &, const QModelIndex &) {
+	if (m_dispatchProxyModel && m_dispatchTileView && m_dispatchTileView->selectionModel()) {
+		QModelIndex dispatchIndex = m_dispatchProxyModel->mapFromSource(qtvUsers->currentIndex());
+		QSignalBlocker selectionBlocker(m_dispatchTileView->selectionModel());
+		m_dispatchTileView->setCurrentIndex(dispatchIndex);
+	}
+
 	updateChatBar();
 }
 
