@@ -240,6 +240,7 @@ protected:
 	Channel *getContextMenuChannel();
 	ClientUser *getContextMenuUser();
 	ContextMenuTarget getContextMenuTargets();
+	void showContextMenuForIndex(const QModelIndex &idx, const QPoint &globalPos, bool usePositionForGettingContext);
 
 	void autocompleteUsername();
 
@@ -319,6 +320,8 @@ public slots:
 	void on_qteChat_backtabPressed();
 	void on_qteChat_ctrlSpacePressed();
 	void on_qtvUsers_customContextMenuRequested(const QPoint &mpos, bool usePositionForGettingContext = true);
+	void on_dispatchTile_activated(const QModelIndex &proxyIndex);
+	void on_dispatchTile_customContextMenuRequested(const QPoint &mpos);
 	void on_qteLog_customContextMenuRequested(const QPoint &pos);
 	void on_qteLog_anchorClicked(const QUrl &);
 	void on_qteLog_highlighted(const QUrl &link);
