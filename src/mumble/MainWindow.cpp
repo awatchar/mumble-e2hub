@@ -17,6 +17,8 @@
 #include "ConnectDialog.h"
 #include "Connection.h"
 #include "Database.h"
+#include "DispatchProxyModel.h"
+#include "DispatchTileView.h"
 #include "DeveloperConsole.h"
 #include "Log.h"
 #include "MumbleConstants.h"
@@ -69,6 +71,7 @@
 #endif
 
 #include <QAccessible>
+#include <QtCore/QItemSelectionModel>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QUrlQuery>
 #include <QtGui/QClipboard>
@@ -168,7 +171,14 @@ MainWindow::MainWindow(QWidget *p)
 	qaEmpty->setEnabled(false);
 
 	createActions();
+	qaDispatchView = new QAction(tr("Dispatch View"), this);
+	qaDispatchView->setObjectName(QLatin1String("qaDispatchView"));
+	qaDispatchView->setCheckable(true);
+	qaDispatchView->setChecked(false);
 	setupUi(this);
+	qmConfig->addSeparator();
+	qmConfig->addAction(qaDispatchView);
+	QObject::connect(qaDispatchView, &QAction::triggered, this, &MainWindow::on_qaDispatchView_triggered);
 	setupGui();
 	connect(qmUser, SIGNAL(aboutToShow()), this, SLOT(qmUser_aboutToShow()));
 	connect(qmChannel, SIGNAL(aboutToShow()), this, SLOT(qmChannel_aboutToShow()));
@@ -461,7 +471,16 @@ void MainWindow::createActions() {
 
 void MainWindow::setupGui() {
 	updateWindowTitle();
-	setCentralWidget(qtvUsers);
+	m_userViewStack = new QStackedWidget(this);
+	m_dispatchTileView = new DispatchTileView(m_userViewStack);
+	m_dispatchProxyModel = new DispatchProxyModel(m_dispatchTileView);
+	m_dispatchTileView->setModel(m_dispatchProxyModel);
+
+	m_userViewStack->addWidget(qtvUsers);
+	m_userViewStack->addWidget(m_dispatchTileView);
+	m_userViewStack->setCurrentWidget(qtvUsers);
+
+	setCentralWidget(m_userViewStack);
 	setAcceptDrops(true);
 
 #ifdef Q_OS_MAC
@@ -487,6 +506,7 @@ void MainWindow::setupGui() {
 
 	pmModel = new UserModel(qtvUsers);
 	qtvUsers->setModel(pmModel);
+	m_dispatchProxyModel->setSourceModel(pmModel);
 	qtvUsers->setRowHidden(0, QModelIndex(), true);
 	qtvUsers->ensurePolished();
 
@@ -562,6 +582,12 @@ void MainWindow::setupGui() {
 
 	connect(qtvUsers->selectionModel(), SIGNAL(currentChanged(const QModelIndex &, const QModelIndex &)),
 			SLOT(qtvUserCurrentChanged(const QModelIndex &, const QModelIndex &)));
+	connect(m_dispatchTileView, &DispatchTileView::clicked, this, &MainWindow::on_qtvDispatch_clicked);
+	connect(m_dispatchTileView, &DispatchTileView::activated, this, &MainWindow::on_qtvDispatch_activated);
+	connect(m_dispatchTileView, &DispatchTileView::customContextMenuRequested, this,
+			&MainWindow::on_qtvDispatch_customContextMenuRequested);
+	connect(m_dispatchTileView->selectionModel(), &QItemSelectionModel::currentChanged, this,
+			&MainWindow::on_qtvDispatch_currentChanged);
 
 	// QtCreator and uic.exe do not allow adding arbitrary widgets
 	// such as a MUComboBox to a QToolbar, even though they are supported.
@@ -989,10 +1015,15 @@ void MainWindow::on_qtvUsers_customContextMenuRequested(const QPoint &mpos, bool
 		qtvUsers->setCurrentIndex(idx);
 	}
 
+	showUserContextMenuForIndex(idx, qtvUsers->mapToGlobal(mpos), mpos, usePositionForGettingContext);
+}
+
+void MainWindow::showUserContextMenuForIndex(const QModelIndex &idx, const QPoint &globalPos,
+								const QPoint &contextPos, bool usePositionForGettingContext) {
 	ClientUser *p    = pmModel->getUser(idx);
 	Channel *channel = pmModel->getChannel(idx);
 
-	qpContextPosition = mpos;
+	qpContextPosition = contextPos;
 	if (pmModel->isChannelListener(idx)) {
 		// Have a separate context menu for listeners
 		QModelIndex parent = idx.parent();
@@ -1003,7 +1034,7 @@ void MainWindow::on_qtvUsers_customContextMenuRequested(const QPoint &mpos, bool
 			cContextChannel = pmModel->getChannel(parent);
 		}
 		cuContextUser.clear();
-		qmListener->exec(qtvUsers->mapToGlobal(mpos), nullptr);
+		qmListener->exec(globalPos, nullptr);
 		cuContextUser.clear();
 		cContextChannel.clear();
 	} else {
@@ -1013,7 +1044,7 @@ void MainWindow::on_qtvUsers_customContextMenuRequested(const QPoint &mpos, bool
 				cuContextUser = p;
 			}
 
-			qmUser->exec(qtvUsers->mapToGlobal(mpos), nullptr);
+			qmUser->exec(globalPos, nullptr);
 			cuContextUser.clear();
 		} else {
 			cContextChannel.clear();
@@ -1022,11 +1053,62 @@ void MainWindow::on_qtvUsers_customContextMenuRequested(const QPoint &mpos, bool
 				cContextChannel = channel;
 			}
 
-			qmChannel->exec(qtvUsers->mapToGlobal(mpos), nullptr);
+			qmChannel->exec(globalPos, nullptr);
 			cContextChannel.clear();
 		}
 	}
 	qpContextPosition = QPoint();
+}
+
+void MainWindow::on_qtvDispatch_clicked(const QModelIndex &index) {
+	on_qtvDispatch_activated(index);
+}
+
+void MainWindow::on_qtvDispatch_activated(const QModelIndex &index) {
+	if (!m_dispatchProxyModel) {
+		return;
+	}
+
+	QModelIndex sourceIndex = m_dispatchProxyModel->mapToSource(index);
+	if (!sourceIndex.isValid()) {
+		return;
+	}
+
+	qtvUsers->setCurrentIndex(sourceIndex);
+}
+
+void MainWindow::on_qtvDispatch_customContextMenuRequested(const QPoint &mpos) {
+	if (!m_dispatchProxyModel) {
+		return;
+	}
+
+	QModelIndex dispatchIndex = m_dispatchTileView->indexAt(mpos);
+	if (!dispatchIndex.isValid()) {
+		dispatchIndex = m_dispatchTileView->currentIndex();
+	} else {
+		m_dispatchTileView->setCurrentIndex(dispatchIndex);
+	}
+
+	QModelIndex sourceIndex = m_dispatchProxyModel->mapToSource(dispatchIndex);
+	if (!sourceIndex.isValid()) {
+		return;
+	}
+
+	qtvUsers->setCurrentIndex(sourceIndex);
+	const QPoint globalPos = m_dispatchTileView->viewport()->mapToGlobal(mpos);
+	const QPoint treePos   = qtvUsers->viewport()->mapFromGlobal(globalPos);
+	showUserContextMenuForIndex(sourceIndex, globalPos, treePos, false);
+}
+
+void MainWindow::on_qtvDispatch_currentChanged(const QModelIndex &current, const QModelIndex &) {
+	if (!m_dispatchProxyModel) {
+		return;
+	}
+
+	QModelIndex sourceIndex = m_dispatchProxyModel->mapToSource(current);
+	if (sourceIndex.isValid() && sourceIndex != qtvUsers->currentIndex()) {
+		qtvUsers->setCurrentIndex(sourceIndex);
+	}
 }
 
 void MainWindow::on_qteLog_customContextMenuRequested(const QPoint &mpos) {
@@ -2830,6 +2912,26 @@ void MainWindow::on_qaConfigMinimal_triggered() {
 	Global::get().s.bMinimalView = qaConfigMinimal->isChecked();
 	updateWindowTitle();
 	setupView();
+}
+
+void MainWindow::on_qaDispatchView_triggered() {
+	if (!m_userViewStack || !m_dispatchTileView || !m_dispatchProxyModel) {
+		return;
+	}
+
+	if (qaDispatchView->isChecked()) {
+		QModelIndex dispatchIndex = m_dispatchProxyModel->mapFromSource(qtvUsers->currentIndex());
+		if (dispatchIndex.isValid()) {
+			m_dispatchTileView->setCurrentIndex(dispatchIndex);
+		}
+		m_userViewStack->setCurrentWidget(m_dispatchTileView);
+	} else {
+		QModelIndex sourceIndex = m_dispatchProxyModel->mapToSource(m_dispatchTileView->currentIndex());
+		if (sourceIndex.isValid()) {
+			qtvUsers->setCurrentIndex(sourceIndex);
+		}
+		m_userViewStack->setCurrentWidget(qtvUsers);
+	}
 }
 
 void MainWindow::on_qaConfigHideFrame_triggered() {

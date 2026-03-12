@@ -10,6 +10,7 @@
 #include <QtCore/QtGlobal>
 #include <QtNetwork/QAbstractSocket>
 #include <QtWidgets/QMainWindow>
+#include <QtWidgets/QStackedWidget>
 
 #include "CustomElements.h"
 #include "Log.h"
@@ -50,6 +51,8 @@ class SearchDialog;
 class MenuLabel;
 class ListenerVolumeSlider;
 class UserLocalVolumeSlider;
+class DispatchProxyModel;
+class DispatchTileView;
 
 struct ShortcutTarget;
 
@@ -198,6 +201,10 @@ protected:
 	QAction *qaTransmitModeSeparator;
 
 	Search::SearchDialog *m_searchDialog = nullptr;
+	QStackedWidget *m_userViewStack        = nullptr;
+	DispatchTileView *m_dispatchTileView   = nullptr;
+	DispatchProxyModel *m_dispatchProxyModel = nullptr;
+	QAction *qaDispatchView                = nullptr;
 
 	qt_unique_ptr< MenuLabel > m_localVolumeLabel;
 	qt_unique_ptr< UserLocalVolumeSlider > m_userLocalVolumeSlider;
@@ -235,6 +242,8 @@ protected:
 	ContextMenuTarget getContextMenuTargets();
 
 	void autocompleteUsername();
+	void showUserContextMenuForIndex(const QModelIndex &idx, const QPoint &globalPos,
+								const QPoint &contextPos, bool usePositionForGettingContext);
 
 public slots:
 	void on_qmServer_aboutToShow();
@@ -298,6 +307,7 @@ public slots:
 	void on_qaConfigHideFrame_triggered();
 	void on_qmConfig_aboutToShow();
 	void on_qaConfigMinimal_triggered();
+	void on_qaDispatchView_triggered();
 	void on_qaConfigCert_triggered();
 	void on_qaAudioWizard_triggered();
 	void on_qaDeveloperConsole_triggered();
@@ -311,6 +321,10 @@ public slots:
 	void on_qteChat_backtabPressed();
 	void on_qteChat_ctrlSpacePressed();
 	void on_qtvUsers_customContextMenuRequested(const QPoint &mpos, bool usePositionForGettingContext = true);
+	void on_qtvDispatch_clicked(const QModelIndex &index);
+	void on_qtvDispatch_activated(const QModelIndex &index);
+	void on_qtvDispatch_customContextMenuRequested(const QPoint &mpos);
+	void on_qtvDispatch_currentChanged(const QModelIndex &current, const QModelIndex &previous);
 	void on_qteLog_customContextMenuRequested(const QPoint &pos);
 	void on_qteLog_anchorClicked(const QUrl &);
 	void on_qteLog_highlighted(const QUrl &link);
