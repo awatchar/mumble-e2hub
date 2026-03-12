@@ -10,6 +10,8 @@
 #include "DispatchRoles.h"
 #include "UserModel.h"
 
+#include <algorithm>
+
 DispatchProxyModel::DispatchProxyModel(QObject *parent) : QAbstractProxyModel(parent) {}
 
 DispatchProxyModel::~DispatchProxyModel() = default;
@@ -23,12 +25,17 @@ QModelIndex DispatchProxyModel::mapToSource(const QModelIndex &proxyIndex) const
 }
 
 QModelIndex DispatchProxyModel::mapFromSource(const QModelIndex &sourceIndex) const {
-	if (!sourceIndex.isValid() || sourceIndex.column() != 0) {
+	if (!sourceIndex.isValid()) {
+		return QModelIndex();
+	}
+
+	QModelIndex sourceColumnZero = sourceIndex.sibling(sourceIndex.row(), 0);
+	if (!sourceColumnZero.isValid()) {
 		return QModelIndex();
 	}
 
 	for (int row = 0; row < m_userItems.size(); ++row) {
-		if (m_userItems.at(row) == sourceIndex) {
+		if (m_userItems.at(row) == sourceColumnZero) {
 			return createIndex(row, 0);
 		}
 	}
@@ -122,11 +129,40 @@ void DispatchProxyModel::setSourceModel(QAbstractItemModel *sourceModel) {
 }
 
 void DispatchProxyModel::rebuildIndex() {
+	// Intentionally conservative: rebuild the flattened cache on source-model changes.
+	// This keeps mapping correctness simple while the Dispatch view is still evolving.
 	beginResetModel();
 	m_userItems.clear();
 
 	if (sourceModel() && m_userModel) {
 		collectUsers(QModelIndex());
+
+		std::sort(m_userItems.begin(), m_userItems.end(), [this](const QPersistentModelIndex &lhs,
+											 const QPersistentModelIndex &rhs) {
+			ClientUser *leftUser  = m_userModel->getUser(lhs);
+			ClientUser *rightUser = m_userModel->getUser(rhs);
+
+			Channel *leftChannel  = m_userModel->getChannel(lhs.parent());
+			Channel *rightChannel = m_userModel->getChannel(rhs.parent());
+
+			const QString leftChannelName  = leftChannel ? leftChannel->qsName : QString();
+			const QString rightChannelName = rightChannel ? rightChannel->qsName : QString();
+			const int channelCmp           = QString::localeAwareCompare(leftChannelName, rightChannelName);
+			if (channelCmp != 0) {
+				return channelCmp < 0;
+			}
+
+			const QString leftDisplay  = leftUser ? leftUser->qsName : QString();
+			const QString rightDisplay = rightUser ? rightUser->qsName : QString();
+			const int userCmp          = QString::localeAwareCompare(leftDisplay, rightDisplay);
+			if (userCmp != 0) {
+				return userCmp < 0;
+			}
+
+			const uint leftSession  = leftUser ? leftUser->uiSession : 0;
+			const uint rightSession = rightUser ? rightUser->uiSession : 0;
+			return leftSession < rightSession;
+		});
 	}
 
 	endResetModel();

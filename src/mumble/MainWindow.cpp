@@ -72,8 +72,10 @@
 
 #include <QAccessible>
 #include <QtCore/QItemSelectionModel>
+#include <QtCore/QSignalBlocker>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QUrlQuery>
+#include <QtCore/qscopedvaluerollback.h>
 #include <QtGui/QClipboard>
 #include <QtGui/QDesktopServices>
 #include <QtGui/QImageReader>
@@ -1071,10 +1073,11 @@ void MainWindow::on_qtvDispatch_activated(const QModelIndex &index) {
 	}
 
 	QModelIndex sourceIndex = m_dispatchProxyModel->mapToSource(index);
-	if (!sourceIndex.isValid()) {
+	if (!sourceIndex.isValid() || sourceIndex == qtvUsers->currentIndex()) {
 		return;
 	}
 
+	QScopedValueRollback< bool > selectionSyncGuard(m_dispatchSelectionSyncInProgress, true);
 	qtvUsers->setCurrentIndex(sourceIndex);
 }
 
@@ -1095,19 +1098,23 @@ void MainWindow::on_qtvDispatch_customContextMenuRequested(const QPoint &mpos) {
 		return;
 	}
 
-	qtvUsers->setCurrentIndex(sourceIndex);
+	if (sourceIndex != qtvUsers->currentIndex()) {
+		QScopedValueRollback< bool > selectionSyncGuard(m_dispatchSelectionSyncInProgress, true);
+		qtvUsers->setCurrentIndex(sourceIndex);
+	}
 	const QPoint globalPos = m_dispatchTileView->viewport()->mapToGlobal(mpos);
 	const QPoint treePos   = qtvUsers->viewport()->mapFromGlobal(globalPos);
 	showUserContextMenuForIndex(sourceIndex, globalPos, treePos, false);
 }
 
 void MainWindow::on_qtvDispatch_currentChanged(const QModelIndex &current, const QModelIndex &) {
-	if (!m_dispatchProxyModel) {
+	if (!m_dispatchProxyModel || m_dispatchSelectionSyncInProgress) {
 		return;
 	}
 
 	QModelIndex sourceIndex = m_dispatchProxyModel->mapToSource(current);
 	if (sourceIndex.isValid() && sourceIndex != qtvUsers->currentIndex()) {
+		QScopedValueRollback< bool > selectionSyncGuard(m_dispatchSelectionSyncInProgress, true);
 		qtvUsers->setCurrentIndex(sourceIndex);
 	}
 }
@@ -2922,13 +2929,20 @@ void MainWindow::on_qaDispatchView_triggered() {
 
 	if (qaDispatchView->isChecked()) {
 		QModelIndex dispatchIndex = m_dispatchProxyModel->mapFromSource(qtvUsers->currentIndex());
-		if (dispatchIndex.isValid()) {
-			m_dispatchTileView->setCurrentIndex(dispatchIndex);
+		{
+			QScopedValueRollback< bool > selectionSyncGuard(m_dispatchSelectionSyncInProgress, true);
+			QSignalBlocker blocker(m_dispatchTileView->selectionModel());
+			if (dispatchIndex.isValid()) {
+				m_dispatchTileView->setCurrentIndex(dispatchIndex);
+			} else {
+				m_dispatchTileView->selectionModel()->setCurrentIndex(QModelIndex(), QItemSelectionModel::Clear);
+			}
 		}
 		m_userViewStack->setCurrentWidget(m_dispatchTileView);
 	} else {
 		QModelIndex sourceIndex = m_dispatchProxyModel->mapToSource(m_dispatchTileView->currentIndex());
-		if (sourceIndex.isValid()) {
+		if (sourceIndex.isValid() && sourceIndex != qtvUsers->currentIndex()) {
+			QScopedValueRollback< bool > selectionSyncGuard(m_dispatchSelectionSyncInProgress, true);
 			qtvUsers->setCurrentIndex(sourceIndex);
 		}
 		m_userViewStack->setCurrentWidget(qtvUsers);
@@ -3935,6 +3949,25 @@ void MainWindow::qtvUserCurrentChanged(const QModelIndex &, const QModelIndex &)
 	}
 
 	updateChatBar();
+
+	if (!m_dispatchProxyModel || !m_dispatchTileView || m_dispatchSelectionSyncInProgress) {
+		return;
+	}
+
+	QModelIndex dispatchIndex = m_dispatchProxyModel->mapFromSource(qtvUsers->currentIndex());
+	QModelIndex currentDispatchIndex = m_dispatchTileView->currentIndex();
+
+	if (dispatchIndex == currentDispatchIndex) {
+		return;
+	}
+
+	QScopedValueRollback< bool > selectionSyncGuard(m_dispatchSelectionSyncInProgress, true);
+	QSignalBlocker blocker(m_dispatchTileView->selectionModel());
+	if (dispatchIndex.isValid()) {
+		m_dispatchTileView->setCurrentIndex(dispatchIndex);
+	} else {
+		m_dispatchTileView->selectionModel()->setCurrentIndex(QModelIndex(), QItemSelectionModel::Clear);
+	}
 }
 
 void MainWindow::updateChatBar() {

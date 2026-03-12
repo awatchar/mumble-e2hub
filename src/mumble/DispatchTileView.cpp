@@ -7,6 +7,9 @@
 
 #include "DispatchTileDelegate.h"
 
+#include <QtCore/QSize>
+#include <QtWidgets/QStyleOptionViewItem>
+
 DispatchTileView::DispatchTileView(QWidget *parent) : QListView(parent) {
 	setObjectName(QLatin1String("qtvDispatch"));
 	setViewMode(QListView::IconMode);
@@ -19,6 +22,28 @@ DispatchTileView::DispatchTileView(QWidget *parent) : QListView(parent) {
 	setUniformItemSizes(true);
 	setContextMenuPolicy(Qt::CustomContextMenu);
 	setItemDelegate(new DispatchTileDelegate(this));
+	setTileSizePreset(TileSizePreset::Normal);
 }
 
 DispatchTileView::~DispatchTileView() = default;
+
+void DispatchTileView::setTileSizePreset(TileSizePreset preset) {
+	m_tileSizePreset = preset;
+
+	DispatchTileDelegate *dispatchDelegate = qobject_cast< DispatchTileDelegate * >(itemDelegate());
+	if (dispatchDelegate) {
+		dispatchDelegate->setTileSizePreset(preset == TileSizePreset::Large
+							   ? DispatchTileDelegate::TileSizePreset::Large
+							   : DispatchTileDelegate::TileSizePreset::Normal);
+
+		const QSize tileSize = dispatchDelegate->sizeHint(QStyleOptionViewItem(), QModelIndex());
+		setGridSize(tileSize + QSize(16, 16));
+	} else {
+		setGridSize(preset == TileSizePreset::Large ? QSize(276, 166) : QSize(226, 140));
+	}
+	viewport()->update();
+}
+
+DispatchTileView::TileSizePreset DispatchTileView::tileSizePreset() const {
+	return m_tileSizePreset;
+}

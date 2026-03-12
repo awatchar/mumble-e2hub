@@ -9,16 +9,29 @@
 #include <QtWidgets/QStyledItemDelegate>
 
 class DispatchTileDelegate : public QStyledItemDelegate {
+public:
+	enum class TileSizePreset {
+		Normal,
+		Large
+	};
+
+private:
 	Q_OBJECT
 	Q_DISABLE_COPY(DispatchTileDelegate)
 
 public:
 	explicit DispatchTileDelegate(QObject *parent = nullptr);
+
+	void setTileSizePreset(TileSizePreset preset);
+	TileSizePreset tileSizePreset() const;
 	~DispatchTileDelegate() Q_DECL_OVERRIDE;
 
 	void paint(QPainter *painter, const QStyleOptionViewItem &option,
 			   const QModelIndex &index) const Q_DECL_OVERRIDE;
 	QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const Q_DECL_OVERRIDE;
+
+private:
+	TileSizePreset m_tileSizePreset = TileSizePreset::Normal;
 };
 
 #endif // MUMBLE_MUMBLE_DISPATCHTILEDELEGATE_H_

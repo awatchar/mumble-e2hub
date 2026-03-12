@@ -205,6 +205,7 @@ protected:
 	DispatchTileView *m_dispatchTileView   = nullptr;
 	DispatchProxyModel *m_dispatchProxyModel = nullptr;
 	QAction *qaDispatchView                = nullptr;
+	bool m_dispatchSelectionSyncInProgress = false;
 
 	qt_unique_ptr< MenuLabel > m_localVolumeLabel;
 	qt_unique_ptr< UserLocalVolumeSlider > m_userLocalVolumeSlider;

@@ -8,24 +8,38 @@
 #include "DispatchRoles.h"
 
 #include <QtCore/QStringList>
+#include <QtGui/QFontMetrics>
 #include <QtGui/QPainter>
 
 DispatchTileDelegate::DispatchTileDelegate(QObject *parent) : QStyledItemDelegate(parent) {}
 
 DispatchTileDelegate::~DispatchTileDelegate() = default;
 
+void DispatchTileDelegate::setTileSizePreset(TileSizePreset preset) {
+	m_tileSizePreset = preset;
+}
+
+DispatchTileDelegate::TileSizePreset DispatchTileDelegate::tileSizePreset() const {
+	return m_tileSizePreset;
+}
+
 void DispatchTileDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option,
 							 const QModelIndex &index) const {
 	painter->save();
 	painter->setRenderHint(QPainter::Antialiasing, true);
 
-	QRect tileRect = option.rect.adjusted(4, 4, -4, -4);
+	const bool isLarge = (m_tileSizePreset == TileSizePreset::Large);
+	const int margin   = isLarge ? 8 : 6;
+	QRect tileRect     = option.rect.adjusted(margin, margin, -margin, -margin);
+
 	QColor backgroundColor = option.state.testFlag(QStyle::State_Selected)
 							 ? option.palette.highlight().color()
-							 : option.palette.base().color().darker(108);
-	QColor borderColor = option.palette.mid().color();
+							 : option.palette.base().color().darker(120);
+	QColor borderColor     = option.state.testFlag(QStyle::State_Selected)
+							 ? option.palette.highlightedText().color()
+							 : option.palette.mid().color();
 
-	painter->setPen(borderColor);
+	painter->setPen(QPen(borderColor, 1.2));
 	painter->setBrush(backgroundColor);
 	painter->drawRoundedRect(tileRect, 6.0, 6.0);
 
@@ -36,20 +50,34 @@ void DispatchTileDelegate::paint(QPainter *painter, const QStyleOptionViewItem &
 	QString channelName = index.data(DispatchRoles::ChannelName).toString();
 	QString sessionText = tr("Session %1").arg(index.data(DispatchRoles::SessionId).toUInt());
 
-	QRect textRect = tileRect.adjusted(10, 8, -10, -8);
-	QFont nameFont = option.font;
+	QRect contentRect = tileRect.adjusted(10, 8, -10, -8);
+	QFont nameFont    = option.font;
 	nameFont.setBold(true);
+	if (isLarge) {
+		nameFont.setPointSizeF(nameFont.pointSizeF() + 1.0);
+	}
 	painter->setFont(nameFont);
 	painter->setPen(option.palette.text().color());
-	painter->drawText(textRect, Qt::AlignTop | Qt::TextSingleLine, displayName);
+
+	QFontMetrics nameMetrics(nameFont);
+	const QString elidedName = nameMetrics.elidedText(displayName, Qt::ElideRight, contentRect.width());
+	painter->drawText(QRect(contentRect.left(), contentRect.top(), contentRect.width(), nameMetrics.height()),
+				 Qt::AlignLeft | Qt::AlignVCenter, elidedName);
 
 	QFont detailFont = option.font;
-	detailFont.setPointSizeF(detailFont.pointSizeF() * 0.9);
+	detailFont.setPointSizeF(detailFont.pointSizeF() * (isLarge ? 0.95 : 0.9));
 	painter->setFont(detailFont);
-	QRect detailRect = textRect.adjusted(0, 28, 0, 0);
-	painter->drawText(detailRect, Qt::AlignTop | Qt::TextSingleLine,
-				  channelName.isEmpty() ? tr("No channel") : channelName);
-	painter->drawText(detailRect.adjusted(0, 22, 0, 0), Qt::AlignTop | Qt::TextSingleLine, sessionText);
+	QFontMetrics detailMetrics(detailFont);
+
+	const QString channelLabel = channelName.isEmpty() ? tr("No channel") : channelName;
+	const QString elidedChannel = detailMetrics.elidedText(channelLabel, Qt::ElideRight, contentRect.width());
+	QRect channelRect(contentRect.left(), contentRect.top() + nameMetrics.height() + 4, contentRect.width(),
+				 detailMetrics.height());
+	painter->drawText(channelRect, Qt::AlignLeft | Qt::AlignVCenter, elidedChannel);
+
+	const QString elidedSession = detailMetrics.elidedText(sessionText, Qt::ElideRight, contentRect.width());
+	QRect sessionRect(channelRect.left(), channelRect.bottom() + 2, channelRect.width(), detailMetrics.height());
+	painter->drawText(sessionRect, Qt::AlignLeft | Qt::AlignVCenter, elidedSession);
 
 	QStringList states;
 	if (index.data(DispatchRoles::Muted).toBool()) {
@@ -59,16 +87,22 @@ void DispatchTileDelegate::paint(QPainter *painter, const QStyleOptionViewItem &
 		states << tr("Deafened");
 	}
 	if (index.data(DispatchRoles::LocalMuted).toBool()) {
-		states << tr("Local mute");
+		states << tr("Local");
 	}
 	if (states.isEmpty()) {
-		states << tr("Audio clear");
+		states << tr("Clear");
 	}
-	painter->drawText(detailRect.adjusted(0, 44, 0, 0), Qt::AlignTop | Qt::TextSingleLine, states.join(tr(" • ")));
+
+	QRect badgeRect(contentRect.left(), tileRect.bottom() - detailMetrics.height() - 10,
+				   contentRect.width(), detailMetrics.height());
+	painter->setPen(option.state.testFlag(QStyle::State_Selected) ? option.palette.highlightedText().color()
+									   : option.palette.brightText().color());
+	painter->drawText(badgeRect, Qt::AlignLeft | Qt::AlignVCenter,
+				 detailMetrics.elidedText(states.join(tr(" · ")), Qt::ElideRight, badgeRect.width()));
 
 	painter->restore();
 }
 
 QSize DispatchTileDelegate::sizeHint(const QStyleOptionViewItem &, const QModelIndex &) const {
-	return QSize(190, 120);
+	return m_tileSizePreset == TileSizePreset::Large ? QSize(260, 150) : QSize(210, 124);
 }

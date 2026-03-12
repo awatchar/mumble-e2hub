@@ -9,12 +9,25 @@
 #include <QtWidgets/QListView>
 
 class DispatchTileView : public QListView {
+public:
+	enum class TileSizePreset {
+		Normal,
+		Large
+	};
+
+private:
 	Q_OBJECT
 	Q_DISABLE_COPY(DispatchTileView)
 
 public:
 	explicit DispatchTileView(QWidget *parent = nullptr);
+
+	void setTileSizePreset(TileSizePreset preset);
+	TileSizePreset tileSizePreset() const;
 	~DispatchTileView() Q_DECL_OVERRIDE;
+
+private:
+	TileSizePreset m_tileSizePreset = TileSizePreset::Normal;
 };
 
 #endif // MUMBLE_MUMBLE_DISPATCHTILEVIEW_H_
