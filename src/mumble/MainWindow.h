@@ -10,6 +10,7 @@
 #include <QtCore/QtGlobal>
 #include <QtNetwork/QAbstractSocket>
 #include <QtWidgets/QMainWindow>
+#include <QtWidgets/QStackedWidget>
 
 #include "CustomElements.h"
 #include "Log.h"
@@ -50,6 +51,7 @@ class SearchDialog;
 class MenuLabel;
 class ListenerVolumeSlider;
 class UserLocalVolumeSlider;
+class DispatchTileView;
 
 struct ShortcutTarget;
 
@@ -198,6 +200,9 @@ protected:
 	QAction *qaTransmitModeSeparator;
 
 	Search::SearchDialog *m_searchDialog = nullptr;
+	QStackedWidget *m_userViewStack      = nullptr;
+	DispatchTileView *m_dispatchTileView = nullptr;
+	QAction *qaDispatchView              = nullptr;
 
 	qt_unique_ptr< MenuLabel > m_localVolumeLabel;
 	qt_unique_ptr< UserLocalVolumeSlider > m_userLocalVolumeSlider;
@@ -298,6 +303,7 @@ public slots:
 	void on_qaConfigHideFrame_triggered();
 	void on_qmConfig_aboutToShow();
 	void on_qaConfigMinimal_triggered();
+	void on_qaDispatchView_triggered();
 	void on_qaConfigCert_triggered();
 	void on_qaAudioWizard_triggered();
 	void on_qaDeveloperConsole_triggered();
