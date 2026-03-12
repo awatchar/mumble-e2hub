@@ -78,6 +78,7 @@
 #include <QtGui/QDesktopServices>
 #include <QtGui/QImageReader>
 #include <QtGui/QScreen>
+#include <QtGui/QStandardItemModel>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QInputDialog>
 #include <QtWidgets/QMessageBox>
@@ -1007,12 +1008,10 @@ bool MainWindow::handleSpecialContextMenu(const QUrl &url, const QPoint &pos_, b
 	return true;
 }
 
-void MainWindow::on_qtvUsers_customContextMenuRequested(const QPoint &mpos, bool usePositionForGettingContext) {
-	QModelIndex idx = qtvUsers->indexAt(mpos);
-	if (!idx.isValid() || !usePositionForGettingContext) {
-		idx = qtvUsers->currentIndex();
-	} else {
-		qtvUsers->setCurrentIndex(idx);
+void MainWindow::showContextMenuForIndex(const QModelIndex &idx, const QPoint &globalPos,
+						   bool usePositionForGettingContext) {
+	if (!idx.isValid()) {
+		return;
 	}
 
 	showUserContextMenuForIndex(idx, qtvUsers->mapToGlobal(mpos), mpos, usePositionForGettingContext);
@@ -1025,12 +1024,9 @@ void MainWindow::showUserContextMenuForIndex(const QModelIndex &idx, const QPoin
 
 	qpContextPosition = contextPos;
 	if (pmModel->isChannelListener(idx)) {
-		// Have a separate context menu for listeners
 		QModelIndex parent = idx.parent();
 
 		if (parent.isValid()) {
-			// Find the channel in which the action was triggered and set it
-			// in order to be able to obtain it in the action itself
 			cContextChannel = pmModel->getChannel(parent);
 		}
 		cuContextUser.clear();
@@ -1049,14 +1045,19 @@ void MainWindow::showUserContextMenuForIndex(const QModelIndex &idx, const QPoin
 		} else {
 			cContextChannel.clear();
 
-			if (!usePositionForGettingContext && channel) {
-				cContextChannel = channel;
-			}
+		qmUser->exec(globalPos, nullptr);
+		cuContextUser.clear();
+	} else {
+		cContextChannel.clear();
 
 			qmChannel->exec(globalPos, nullptr);
 			cContextChannel.clear();
 		}
+
+		qmChannel->exec(globalPos, nullptr);
+		cContextChannel.clear();
 	}
+
 	qpContextPosition = QPoint();
 }
 
@@ -3927,6 +3928,12 @@ void MainWindow::on_qaTalkingUIToggle_triggered() {
  * the selected user/channel in the users treeview.
  */
 void MainWindow::qtvUserCurrentChanged(const QModelIndex &, const QModelIndex &) {
+	if (m_dispatchProxyModel && m_dispatchTileView && m_dispatchTileView->selectionModel()) {
+		QModelIndex dispatchIndex = m_dispatchProxyModel->mapFromSource(qtvUsers->currentIndex());
+		QSignalBlocker selectionBlocker(m_dispatchTileView->selectionModel());
+		m_dispatchTileView->setCurrentIndex(dispatchIndex);
+	}
+
 	updateChatBar();
 }
 
